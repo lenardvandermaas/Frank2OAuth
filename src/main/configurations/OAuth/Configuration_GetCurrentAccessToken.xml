@@ -1,0 +1,23 @@
+<Adapter name="GetCurrentAccessToken" active="${GetCurrentAccessToken.active}">
+	<Receiver name="GetCurrentAccessToken">
+		<JavaListener name="GetCurrentAccessToken"/>
+	</Receiver>
+
+	<Pipeline firstPipe="GetToken">
+
+		<Exit path="EXIT" state="success"/>
+
+		<SenderPipe name="GetToken"
+			storeResultInSessionKey="access_token">
+			<FixedQuerySender name="GetToken"
+				queryType="select"
+				query="select INF.TOKEN from OAUTH_INFO
+					join CLIENT using (CLI_ID) WHERE SYS_ID = ? and CLI_NAME = ?"
+				scalar="true">
+				<Param name="SYS_ID" sessionKey="originalMessage"/>
+				<Param name="CLI_NAME" sessionKey="client_name"/>
+			</FixedQuerySender>
+			<Forward name="success" path="EXIT"/>
+		</SenderPipe>
+	</Pipeline>
+</Adapter>

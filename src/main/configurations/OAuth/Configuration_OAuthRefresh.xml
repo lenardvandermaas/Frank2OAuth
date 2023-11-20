@@ -1,0 +1,83 @@
+<Module>
+	<Adapter name="OAuthRefresh" active="${OAuthRefresh.active}">
+		<Receiver name="OAuthRefresh">
+			<JavaListener name="OAuthRefresh"/>
+		</Receiver>
+
+		<Pipeline firstPipe="GetOAUTHInfo">
+
+			<Exit path="EXIT" state="success"/>
+			<Exit path="ERROR" state="error"/>
+
+			<SenderPipe name="GetOAUTHInfo" storeResultInSessionKey="OAuthInfo">
+				<FixedQuerySender name="GetOAUTHInfo"
+				                  queryType="select"
+				                  query="select OAUTH_INFO.INF_ID, OAUTH_INFO.INF_CLIENT_ID, OAUTH_INFO.INF_CLIENT_SECRET, OAUTH_INFO.INF_REFRESH_TOKEN,
+				                            SYSTEM.SYS_DATATYPE, SYSTEM.SYS_TOKEN_URL
+				                            from OAUTH_INFO join SYSTEM using (SYS_ID) where SYS_ID = ? and CLI_ID = ?">
+					<Param name="SYS_ID" xpathExpression="root/system_id"/>
+					<Param name="CLI_ID" xpathExpression="root/client_id"/>
+				</FixedQuerySender>
+				<Forward name="success" path="SwitchOnSystem"/>
+			</SenderPipe>
+
+			<XmlSwitch name="SwitchOnSystem"
+			           xpathExpression="result/rowset/row/field[@name='SYS_DATATYPE']">
+				<Forward name="formdata" path="GetTokenFormData"/>
+				<Forward name="urlencoded" path="GetTokenUrlEncoded"/>
+			</XmlSwitch>
+
+			<SenderPipe name="GetTokenFormData">
+				<HttpSender name="GetTokenFormData"
+				            urlParam="urlParam"
+				            methodType="POST"
+				            postType="FORMDATA"
+				            contentType="multipart/form-data"
+				            resultStatusCodeSessionKey="httpStatus">
+					<Param name="urlParam" xpathExpression="result/rowset/row/field[@name='SYS_TOKEN_URL']"/>
+					<Param name="grant_type" value="refresh_token"/>
+					<Param name="client_id" xpathExpression="result/rowset/row/field[@name='INF_CLIENT_ID']"/>
+					<Param name="client_secret" xpathExpression="result/rowset/row/field[@name='INF_CLIENT_SECRET']"/>
+				</HttpSender>
+				<Forward name="success" path="CheckStatusCode"/>
+				<Forward name="exception" path="Error_CouldNotGetToken"/>
+			</SenderPipe>
+
+			<SenderPipe name="GetTokenUrlEncoded">
+				<HttpSender name="GetTokenUrlEncoded"
+				            urlParam="urlParam"
+				            methodType="POST"
+				            postType="URLENCODED"
+				            contentType="application/x-www-form-urlencoded"
+				            resultStatusCodeSessionKey="httpStatus">
+					<Param name="urlParam" xpathExpression="result/rowset/row/field[@name='SYS_TOKEN_URL']"/>
+					<Param name="grant_type" value="refresh_token"/>
+					<Param name="client_id" xpathExpression="result/rowset/row/field[@name='INF_CLIENT_ID']"/>
+					<Param name="client_secret" xpathExpression="result/rowset/row/field[@name='INF_CLIENT_SECRET']"/>
+				</HttpSender>
+				<Forward name="success" path="CheckStatusCode"/>
+				<Forward name="exception" path="Error_CouldNotGetToken"/>
+			</SenderPipe>
+
+			<XmlSwitchPipe name="CheckStatusCode" forwardNameSessionKey="httpStatus">
+				<Forward name="200" path="Json2Xml"/>
+				<Forward name="400" path="ERROR"/>
+				<Forward name="401" path="ERROR"/>
+				<Forward name="403" path="ERROR"/>
+			</XmlSwitchPipe>
+
+			<JsonPipe name="Json2Xml"/>
+
+			<SenderPipe name="UpdateTokenInfo">
+				<FixedQuerySender name="UpdateTokenInfo"
+				                  queryType="OTHER"
+				                  query="update OAUTH_INFO set INF_TOKEN = ?, INF_REFRESH_TOKEN = ? where INF_ID = ?">
+					<Param name="INF_TOKEN" xpathExpression="root/access_token"/>
+					<Param name="INF_REFRESH_TOKEN" xpathExpression="root/refresh_token"/>
+					<Param name="INF_ID" sessionKey="OAuthInfo" xpathExpression="result/rowset/row/field[@name='INF_ID']"/>
+				</FixedQuerySender>
+				<Forward name="failure" path="ERROR"/>
+			</SenderPipe>
+		</Pipeline>
+	</Adapter>
+</Module>

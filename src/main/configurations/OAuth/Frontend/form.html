@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>OAuth form</title>
+        <link rel="stylesheet" href="form.css">
+    </head>
+
+    <body>
+        <form id="form" accept-charset="utf-8">
+            <select id="systems" name="system"></select><br>
+            <div id="systemsComment"></div>
+            <label for="client_id">Client ID:</label><br>
+            <input id="client_id" name="client_id" type="text"><br>
+            <label for="client_secret">Client Secret:</label><br>
+            <input id="client_secret" name="client_secret" type="text"><br>
+            <input type="submit" value="submit">
+        </form>
+        <script>
+            const getUrl = window.location;
+            const baseUrl = getUrl.protocol + '//' + getUrl.host;
+            const systemsUrl = baseUrl + "/api/GetSystems";
+            const initUrl = baseUrl + "/api/OAuth/Init?uuid=${par}";
+            const select = document.getElementById('systems');
+            const systemsComment = document.getElementById('systemsComment');
+
+            fetch(systemsUrl, {
+              method: "GET"
+            }).then(response => response.text().then(function (text) {
+              const options = JSON.parse(text).system;
+              console.log(options);
+              for (const opt of options) {
+                console.log(opt);
+                var option = document.createElement("option");
+                option.value = opt.name;
+                option.text = opt.displayname;
+                select.appendChild(option);
+              }
+              systemChange(options[0].name);
+            }));
+
+            select.addEventListener('change', (e) => systemChange(e.target.value));
+
+            function systemChange(v) {
+              const oAuthInfoUrl = baseUrl + "/api/OAuth/CheckUserSystems?uuid=${par}&system=" + v;
+              fetch(oAuthInfoUrl, {
+                  method: "GET"
+                }).then(response => response.text().then(function (text) {
+                  systemsComment.textContent = text;
+                }));
+            }
+
+            document.getElementById('form').addEventListener('submit', (e) => {
+              e.preventDefault();
+              const formData = new FormData(e.target).entries();
+              const data = Object.fromEntries(formData);
+              document.body.innerHTML = '<div class="dot-spin"/>'
+              fetch(initUrl, {
+                  method: "POST",
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify(data)
+                }).then(response => response.text().then(function (text) {
+                  window.location.replace(text);
+                }));
+            });
+        </script>
+    </body>
+</html>

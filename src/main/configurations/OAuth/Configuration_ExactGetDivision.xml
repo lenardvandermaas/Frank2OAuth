@@ -1,0 +1,35 @@
+<Module>
+	<Adapter name="ExactGetDivision" active="${ExactGetDivision.active}">
+		<Receiver name="ExactGetDivision">
+			<JavaListener name="ExactGetDivision"/>
+		</Receiver>
+
+		<Pipeline firstPipe="GetDivision">
+
+			<Exit path="EXIT" state="success"/>
+			<Exit path="ERROR" state="error"/>
+
+			<SenderPipe name="GetDivision">
+				<HttpSender name="GetDivision"
+					methodType="GET"
+					url="https://start.exactonline.nl/api/v1/current/Me?$select=CurrentDivision"
+					headersParams="Authorization">
+					<Param name="Authorization" xpathExpression="concat('Bearer ', root/access_token)"/>
+				</HttpSender>
+				<Forward name="success" path="UpdateOAuthInfo"/>
+				<Forward name="exception" path="ERROR"/>
+			</SenderPipe>
+
+			<SenderPipe name="UpdateOAuthInfo">
+				<FixedQuerySender name="UpdateOAuthInfo"
+					queryType="OTHER"
+					query="UPDATE OAUTH_INFO SET INF_DIVISION = ? WHERE INF_STATE = ?">
+					<Param name="INF_DIVISION" xpathExpression="feed/entry/content/properties/CurrentDivision"/>
+					<Param name="INF_STATE" sessionKey="state"/>
+				</FixedQuerySender>
+				<Forward name="success" path="EXIT"/>
+				<Forward name="exception" path="ERROR"/>
+			</SenderPipe>
+		</Pipeline>
+	</Adapter>
+</Module>

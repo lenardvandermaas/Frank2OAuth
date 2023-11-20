@@ -1,0 +1,35 @@
+<Adapter name="OAuthFrontend" active="${OAuthFrontend.active}">
+	<Receiver name="OAuthFrontend">
+		<ApiListener name="OAuthFrontend" active="!${testReceiver}"
+		             uriPattern="/OAuth/${OauthFrontendPath}/{resourceName}"
+		             authenticationMethod="AUTHROLE"
+		             authenticationRoles="IbisDataAdmin,Client,IbisTester"/>
+		<ApiListener name="OAuthFrontend" active="${testReceiver}"
+		             uriPattern="/OAuth/${OauthFrontendPath}/{resourceName}"/>
+	</Receiver>
+
+	<Pipeline firstPipe="PutResourcePathsInSession">
+
+		<Exit path="OK"             state="success" code="200"/>
+		<Exit path="NotFound"       state="error"   code="404" />
+
+		<PutInSessionPipe name="PutResourcePathsInSession">
+			<Param name="html" pattern="OAuth/frontend/{resourceName}"/>
+			<Forward name="success" path="GetHtml"/>
+		</PutInSessionPipe>
+
+		<FixedResultPipe name="GetHtml"
+		                 filenameSessionKey="html"
+		                 lookupAtRuntime="true">
+			<Param name="par" sessionKey="p"/>
+			<Forward name="success" path="OK"/>
+			<Forward name="filenotfound" path="Get404Page"/>
+		</FixedResultPipe>
+
+		<FixedResultPipe name="Get404Page"
+		                 filenameSessionKey="OAuth/frontend/notFound.html">
+			<Forward name="success" path="NotFound"/>
+			<Forward name="filenotfound" path="NotFound"/>
+		</FixedResultPipe>
+	</Pipeline>
+</Adapter>

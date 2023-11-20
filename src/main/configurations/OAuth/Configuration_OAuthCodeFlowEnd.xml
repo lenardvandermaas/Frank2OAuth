@@ -1,0 +1,160 @@
+<Adapter name="OAuthCodeFlowEnd" active="${OAuthCodeFlowEnd.active}">
+	<Receiver name="OAuthCodeFlowEnd">
+		<ApiListener uriPattern="/OAuth/${OAuthRedirectUrl}" active="!${testReceiver}"
+		             authenticationMethod="AUTHROLE"
+		             authenticationRoles="Client,IbisTester"/>
+		<ApiListener uriPattern="/OAuth/${OAuthRedirectUrl}" active="${testReceiver}"/>
+	</Receiver>
+
+	<Pipeline firstPipe="IfError">
+
+		<Exit path="OK"             state="success" code="200"/>
+		<Exit path="NotModified"    state="success" code="304" empty="true" />
+		<Exit path="BadRequest"     state="error"   code="400" />
+		<Exit path="NotAuthorized"  state="error"   code="401" empty="true" />
+		<Exit path="NotAllowed"     state="error"   code="403" empty="true" />
+		<Exit path="ServerError"    state="error"   code="500" />
+
+		<XmlIfPipe name="IfError" regex="success" getInputFromSessionKey="error" emptyInputReplacement="success">
+			<Forward name="then" path="GetOAuthInfo"/>
+			<Forward name="else" path="Error_CouldNotGetLoginPage"/>
+		</XmlIfPipe>
+
+		<SenderPipe name="GetOAuthInfo"
+		            storeResultInSessionKey="OAuthInfo">
+			<FixedQuerySender name="GetOAuthInfo"
+			                  queryType="select"
+			                  query="select OAUTH_INFO.INF_ID, OAUTH_INFO.CLI_ID, OAUTH_INFO.SYS_ID, OAUTH_INFO.INF_CLIENT_ID, OAUTH_INFO.INF_CLIENT_SECRET, OAUTH_INFO.INF_TOKEN, SYSTEM.SYS_TOKEN_URL, SYSTEM.SYS_DATATYPE
+							from OAUTH_INFO join SYSTEM using (SYS_ID) WHERE INF_STATE=?">
+				<Param name="INF_STATE" sessionKey="state"/>
+			</FixedQuerySender>
+			<Forward name="success" path="ifUUIDAlreadyUsed"/>
+		</SenderPipe>
+
+		<XmlIfPipe name="ifUUIDAlreadyUsed"
+		           xpathExpression="result/rowset/row/field[@name='INF_TOKEN']/text()">
+			<Forward name="then" path="Error_UUIDAlreadyUsed"/>
+			<Forward name="else" path="SwitchOnSystem"/>
+		</XmlIfPipe>
+
+		<XmlSwitch name="SwitchOnSystem"
+		           xpathExpression="result/rowset/row/field[@name='SYS_DATATYPE']">
+			<Forward name="formdata" path="GetTokenFormData"/>
+			<Forward name="urlencoded" path="GetTokenUrlEncoded"/>
+		</XmlSwitch>
+
+		<SenderPipe name="GetTokenFormData">
+			<HttpSender name="GetTokenFormData"
+			            urlParam="urlParam"
+			            methodType="POST"
+			            postType="FORMDATA"
+			            contentType="multipart/form-data">
+				<Param name="urlParam" xpathExpression="result/rowset/row/field[@name='SYS_TOKEN_URL']"/>
+				<Param name="code" sessionKey="code"/>
+				<Param name="redirect_uri" value="${OAuthURL}${OAuthRedirectUrl}"/>
+				<Param name="grant_type" value="authorization_code"/>
+				<Param name="client_id" xpathExpression="result/rowset/row/field[@name='INF_CLIENT_ID']"/>
+				<Param name="client_secret" xpathExpression="result/rowset/row/field[@name='INF_CLIENT_SECRET']"/>
+			</HttpSender>
+			<Forward name="success" path="DeleteCurrentOAuthInfo"/>
+			<Forward name="exception" path="Error_CouldNotGetToken"/>
+		</SenderPipe>
+
+		<SenderPipe name="GetTokenUrlEncoded">
+			<HttpSender name="GetTokenUrlEncoded"
+			            urlParam="urlParam"
+			            methodType="POST"
+			            postType="URLENCODED"
+			            contentType="application/x-www-form-urlencoded">
+				<Param name="urlParam" xpathExpression="result/rowset/row/field[@name='SYS_TOKEN_URL']"/>
+				<Param name="code" sessionKey="code"/>
+				<Param name="redirect_uri" value="${OAuthURL}${OAuthRedirectUrl}"/>
+				<Param name="grant_type" value="authorization_code"/>
+				<Param name="client_id" xpathExpression="result/rowset/row/field[@name='INF_CLIENT_ID']"/>
+				<Param name="client_secret" xpathExpression="result/rowset/row/field[@name='INF_CLIENT_SECRET']"/>
+			</HttpSender>
+			<Forward name="success" path="DeleteCurrentOAuthInfo"/>
+			<Forward name="exception" path="Error_CouldNotGetToken"/>
+		</SenderPipe>
+
+		<SenderPipe name="DeleteCurrentOAuthInfo" getInputFromSessionKey="OAuthInfo" preserveInput="true">
+			<FixedQuerySender name="DeleteCurrentOAuthInfo"
+			                  queryType="OTHER"
+			                  query="DELETE FROM OAUTH_INFO WHERE CLI_ID = ? and SYS_ID = ? and INF_STATE &lt;> ?">
+				<Param name="CLI_ID" xpathExpression="result/rowset/row/field[@name='CLIENT_ID']"/>
+				<Param name="SYS_ID" xpathExpression="result/rowset/row/field[@name='SYSTEM_NAME']"/>
+				<Param name="INF_STATE" sessionKey="state"/>
+			</FixedQuerySender>
+			<Forward name="success" path="Json2Xml"/>
+			<Forward name="exception" path="ServerError"/>
+		</SenderPipe>
+
+		<JsonPipe name="Json2Xml">
+			<Forward name="success" path="UpdateOAuthInfo"/>
+		</JsonPipe>
+
+		<SenderPipe name="UpdateOAuthInfo" preserveInput="true">
+			<FixedQuerySender name="UpdateOAuthInfo"
+			                  queryType="OTHER"
+			                  query="UPDATE OAUTH_INFO SET INF_TOKEN = ?, INF_REFRESH_TOKEN = ? WHERE INF_STATE=?">
+				<Param name="TOKEN" xpathExpression="root/access_token"/>
+				<Param name="REFRESH_TOKEN" xpathExpression="root/refresh_token"/>
+				<Param name="OAUTH_STATE" sessionKey="state"/>
+			</FixedQuerySender>
+			<Forward name="success" path="CheckIfExact"/>
+			<Forward name="failure" path="Error_CouldNotStoreToken"/>
+		</SenderPipe>
+
+		<XmlIfPipe name="CheckIfExact"
+		           getInputFromSessionKey="OAuthInfo"
+		           preserveInput="true"
+		           xpathExpression="boolean(result/rowset/row/field[@name='SYS_ID'] = '1')">
+			<Forward name="then" path="ExactGetDivision"/>
+			<Forward name="else" path="successRedirect"/>
+		</XmlIfPipe>
+
+		<SenderPipe name="ExactGetDivision">
+			<IbisLocalSender javaListener="ExactGetDivision">
+				<Param name="state" sessionKey="state"/>
+			</IbisLocalSender>
+			<Forward name="success" path="successRedirect"/>
+			<Forward name="exception" path="Error_CouldNotInitializeExact"/>
+		</SenderPipe>
+
+		<XsltPipe name="successRedirect"
+		          styleSheetName="Util/xsl/redirectPage.xsl">
+			<Param name="url" value="${OAuthURL}${OAuthFrontendPath}/success.html"/>
+			<Forward name="success" path="OK"/>
+		</XsltPipe>
+
+		<XsltPipe name="Error_UUIDAlreadyUsed" getInputFromFixedValue="&lt;dummy/>"
+		          styleSheetName="Util/xsl/redirectPage.xsl">
+			<Param name="url" value="${OAuthURL}${OAuthFrontendPath}/uuidAlreadyUsed.html"/>
+			<Forward name="success" path="BadRequest"/>
+		</XsltPipe>
+
+		<XsltPipe name="Error_CouldNotGetLoginPage" getInputFromFixedValue="&lt;dummy/>"
+		          styleSheetName="Util/xsl/redirectPage.xsl">
+			<Param name="url" value="${OAuthURL}${OAuthFrontendPath}/couldNotGetLoginPage.html"/>
+			<Forward name="success" path="BadRequest"/>
+		</XsltPipe>
+
+		<XsltPipe name="Error_CouldNotGetToken" getInputFromFixedValue="&lt;dummy/>"
+		          styleSheetName="Util/xsl/redirectPage.xsl">
+			<Param name="url" value="${OAuthURL}${OAuthFrontendPath}/couldNotGetToken.html"/>
+			<Forward name="success" path="BadRequest"/>
+		</XsltPipe>
+
+		<XsltPipe name="Error_CouldNotStoreToken" getInputFromFixedValue="&lt;dummy/>"
+		          styleSheetName="Util/xsl/redirectPage.xsl">
+			<Param name="url" value="${OAuthURL}${OAuthFrontendPath}/CouldNotStoreToken.html"/>
+			<Forward name="success" path="ServerError"/>
+		</XsltPipe>
+
+		<XsltPipe name="Error_CouldNotInitializeExact" getInputFromFixedValue="&lt;dummy/>"
+		          styleSheetName="Util/xsl/redirectPage.xsl">
+			<Param name="url" value="${OAuthURL}${OAuthFrontendPath}/couldNotInitializeExact.html"/>
+			<Forward name="success" path="BadRequest"/>
+		</XsltPipe>
+	</Pipeline>
+</Adapter>

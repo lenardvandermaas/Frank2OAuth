@@ -1,0 +1,9 @@
+<project default="restart-frank2oauth">
+    <target name="restart-frank2oauth">
+        <basename property="project.dir" file="${basedir}"/>
+        <exec executable="../frank-runner/restart.bat" vmlauncher="false" failonerror="true">
+            <arg value="-Dproject.dir=Frank2OAuth"/>
+            <arg value="-Dignore.double.jars=true"/>
+        </exec>
+    </target>
+</project>

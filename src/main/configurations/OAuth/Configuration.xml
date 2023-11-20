@@ -1,0 +1,24 @@
+<!DOCTYPE Configuration [
+	<!ENTITY OAuthCodeFlowNew       SYSTEM "./Configuration_OAuthCodeFlowNew.xml">
+	<!ENTITY OAuthCodeFlowStart     SYSTEM "./Configuration_OAuthCodeFlowStart.xml">
+	<!ENTITY OAuthCodeFlowEnd       SYSTEM "./Configuration_OAuthCodeFlowEnd.xml">
+	<!ENTITY OAuthRefresh           SYSTEM "./Configuration_OAuthRefresh.xml">
+	<!ENTITY ExactGetDivision       SYSTEM "./Configuration_ExactGetDivision.xml">
+	<!ENTITY GetCurrentAccessToken  SYSTEM "./Configuration_GetCurrentAccessToken.xml">
+	<!ENTITY OAuthFrontend          SYSTEM "./Configuration_OAuthFrontend.xml">
+	<!ENTITY GetSystems             SYSTEM "./Configuration_GetSystems.xml">
+	<!ENTITY GetClients             SYSTEM "./Configuration_GetClients.xml">
+	]>
+<Configuration name="Frank2OAuth">
+
+	&OAuthCodeFlowNew;
+	&OAuthCodeFlowStart;
+	&OAuthCodeFlowEnd;
+	&OAuthRefresh;
+	&ExactGetDivision;
+	&GetCurrentAccessToken;
+	&OAuthFrontend;
+	&GetSystems;
+	&GetClients;
+
+</Configuration>

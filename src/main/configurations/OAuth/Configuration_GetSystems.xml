@@ -1,0 +1,38 @@
+<Adapter name="GetSystems" active="${GetSystems.active}">
+	<Receiver name="GetSystems">
+		<ApiListener name="GetSystems" active="!${testReceiver}"
+			uriPattern="/OAuth/GetSystems"
+			produces="JSON"
+			authenticationMethod="AUTHROLE"
+			authenticationRoles="Client,IbisTester,IbisDataAdmin"/>
+		<ApiListener name="GetSystems" active="${testReceiver}"
+			uriPattern="/OAuth/GetSystems"
+			produces="JSON"/>
+	</Receiver>
+
+	<Pipeline firstPipe="GetSystems">
+
+		<Exit path="OK"             state="success" code="200"/>
+		<Exit path="NotModified"    state="success" code="304" empty="true" />
+		<Exit path="BadRequest"     state="error"   code="400" />
+		<Exit path="NotAuthorized"  state="error"   code="401" empty="true" />
+		<Exit path="NotAllowed"     state="error"   code="403" empty="true" />
+		<Exit path="ServerError"    state="error"   code="500" />
+
+		<SenderPipe name="GetSystems">
+			<FixedQuerySender name="GetSystems"
+				queryType="SELECT"
+				query="SELECT SYS_NAME, SYS_DISPLAY_NAME FROM SYSTEM"/>
+			<Forward name="success" path="formatSystems"/>
+		</SenderPipe>
+
+		<XsltPipe name="formatSystems"
+			styleSheetName="Database/xsl/formatSystems.xsl">
+			<Forward name="success" path="Xml2Json"/>
+		</XsltPipe>
+
+		<JsonPipe name="Xml2Json" direction="xml2json">
+			<Forward name="success" path="OK"/>
+		</JsonPipe>
+	</Pipeline>
+</Adapter>

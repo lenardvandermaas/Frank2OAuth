@@ -1,0 +1,38 @@
+<Adapter name="GetClients" active="${GetClients.active}">
+	<Receiver name="GetClients">
+		<ApiListener name="GetClients" active="!${testReceiver}"
+			uriPattern="GetClients"
+			produces="JSON"
+			authenticationMethod="AUTHROLE"
+			authenticationRoles="IbisDataAdmin,IbisTester"/>
+		<ApiListener name="GetClients" active="${testReceiver}"
+			uriPattern="/GetClients"
+			produces="JSON"/>
+	</Receiver>
+
+	<Pipeline firstPipe="GetClients">
+
+		<Exit path="OK"             state="success" code="200"/>
+		<Exit path="NotModified"    state="success" code="304" empty="true" />
+		<Exit path="BadRequest"     state="error"   code="400" />
+		<Exit path="NotAuthorized"  state="error"   code="401" empty="true" />
+		<Exit path="NotAllowed"     state="error"   code="403" empty="true" />
+		<Exit path="ServerError"    state="error"   code="500" />
+
+		<SenderPipe name="GetClients">
+			<FixedQuerySender name="GetClients"
+				queryType="SELECT"
+				query="SELECT CLI_NAME, CLI_DISPLAY_NAME FROM CLIENT"/>
+			<Forward name="success" path="formatClients"/>
+		</SenderPipe>
+
+		<XsltPipe name="formatClients"
+			styleSheetName="Database/xsl/formatClients.xsl">
+			<Forward name="success" path="Xml2Json"/>
+		</XsltPipe>
+
+		<JsonPipe name="Xml2Json" direction="xml2json">
+			<Forward name="success" path="OK"/>
+		</JsonPipe>
+	</Pipeline>
+</Adapter>

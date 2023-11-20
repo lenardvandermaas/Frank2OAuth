@@ -1,0 +1,100 @@
+<Adapter name="OAuthCodeFlowStart" active="${OAuthCodeFlowStart.active}">
+	<Receiver name="OAuthCodeFlowStart">
+		<JavaListener name="OAuthCodeFlowStart" active="${OAuthCodeFlowNew.RequireOAuthCredentials}"/>
+		<ApiListener uriPattern="/OAuth/Start" active="!${testReceiver}"
+		             method="POST"
+		             produces="TEXT"
+		             authenticationMethod="AUTHROLE"
+		             authenticationRoles="Client,IbisTester"/>
+		<ApiListener uriPattern="/OAuth/Start" active="${testReceiver}"
+		             method="POST"
+		             produces="TEXT"/>
+	</Receiver>
+
+	<Pipeline>
+
+		<Exit path="OK"             state="success" code="200"/>
+		<Exit path="NotModified"    state="success" code="304" empty="true" />
+		<Exit path="BadRequest"     state="error"   code="400" />
+		<Exit path="NotAuthorized"  state="error"   code="401" empty="true" />
+		<Exit path="NotAllowed"     state="error"   code="403" empty="true" />
+		<Exit path="ServerError"    state="error"   code="500" />
+
+		<JsonPipe name="Json2Xml" active="!${OAuthCodeFlowNew.RequireOAuthCredentials}"/>
+
+		<PutInSessionPipe name="PutInputInSession">
+			<Param name="system_id" xpathExpression="root/system_id"/>
+			<Param name="client_id" xpathExpression="root/client_id"/>
+			<Param name="client_secret" xpathExpression="root/client_secret"/>
+			<Forward name="success" path="GetBaseURL"/>
+		</PutInSessionPipe>
+
+		<SenderPipe name="GetBaseURL"
+		            storeResultInSessionKey="baseURL">
+			<FixedQuerySender name="GetBaseURL"
+			                  queryType="select"
+			                  query="SELECT AUTH_URL FROM SYSTEM WHERE SYSTEM_ID=?"
+			                  scalar="true">
+				<Param name="SYSTEM_ID" sessionKey="system_id"/>
+			</FixedQuerySender>
+			<Forward name="success" path="ifValidSystem"/>
+		</SenderPipe>
+
+		<XmlIfPipe name="ifValidSystem">
+			<Forward name="then" path="GetCurrentOAuthInfo"/>
+			<Forward name="else" path="Error_InvalidSystem"/>
+		</XmlIfPipe>
+
+		<SenderPipe name="GetCurrentOAuthInfo">
+			<FixedQuerySender name="GetCurrentOAuthInfo"
+			                  queryType="SELECT"
+			                  query="SELECT TOKEN FROM OAUTH_INFO WHERE INF_ID = ?"
+			                  scalar="true">
+				<Param name="INF_ID" sessionKey="uuid"/>
+			</FixedQuerySender>
+			<Forward name="success" path="ifUUIDAlreadyUsed"/>
+		</SenderPipe>
+
+		<XmlIfPipe name="ifUUIDAlreadyUsed">
+			<Forward name="then" path="Error_UUIDAlreadyUsed"/>
+			<Forward name="else" path="StoreOAuthInfo"/>
+		</XmlIfPipe>
+
+		<SenderPipe name="StoreOAuthInfo" storeResultInSessionKey="state">
+			<SenderSeriesSender>
+				<FixedQuerySender name="StoreOAuthInfo"
+				                  queryType="OTHER"
+				                  query="UPDATE OAUTH_INFO SET SYSTEM_ID = ?, OAUTH_CLIENT_ID = ?,OAUTH_CLIENT_SECRET = ? WHERE INF_ID = ?"
+				                  columnsReturned="OAUTH_STATE">
+					<Param name="SYSTEM_ID" sessionKey="system_id"/>
+					<Param name="CLIENT_ID" sessionKey="client_id"/>
+					<Param name="CLIENT_SECRET" sessionKey="client_secret"/>
+					<Param name="INF_ID" sessionKey="uuid"/>
+				</FixedQuerySender>
+			</SenderSeriesSender>
+			<Forward name="success" path="BuildAuthURLRedirect"/>
+			<Forward name="exception" path="ServerError"/>
+		</SenderPipe>
+
+		<XsltPipe name="BuildAuthURLRedirect"
+		          styleSheetName="Util/xsl/redirectURL.xsl"
+		          getInputFromFixedValue="&lt;dummy/>">
+			<Param name="baseURL" sessionKey="baseURL"/>
+			<Param name="state" sessionKey="state"/>
+			<Param name="client_id" sessionKey="client_id"/>
+			<Param name="OAuthRedirectURI" value="${OAuthURL}Callback"/>
+			<Forward name="success" path="OK"/>
+			<Forward name="failure" path="ServerError"/>
+		</XsltPipe>
+
+		<FixedResultPipe name="Error_InvalidSystem"
+		                 returnString="${OAuthURL}${OAuthFrontendPath}/invalidSystem.html">
+			<Forward name="success" path="BadRequest"/>
+		</FixedResultPipe>
+
+		<FixedResultPipe name="Error_UUIDAlreadyUsed"
+		                 returnString="${OAuthURL}${OAuthFrontendPath}/uuidAlreadyUsed.html">
+			<Forward name="success" path="BadRequest"/>
+		</FixedResultPipe>
+	</Pipeline>
+</Adapter>

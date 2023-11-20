@@ -1,0 +1,103 @@
+<Adapter name="OAuthCodeFlowNew" active="${OAuthCodeFlowNew.active}">
+	<Receiver name="OAuthCodeFlowNew">
+		<ApiListener uriPattern="/OAuth/New" active="!${testReceiver}"
+		             method="POST"
+		             produces="TEXT"
+		             authenticationMethod="AUTHROLE"
+		             authenticationRoles="IbisDataAdmin,IbisTester"/>
+		<ApiListener uriPattern="/OAuth/New" active="${testReceiver}"
+		             method="POST"
+		             produces="TEXT"/>
+	</Receiver>
+
+	<Pipeline>
+
+		<Exit path="OK"             state="success" code="200"/>
+		<Exit path="NotModified"    state="success" code="304" empty="true" />
+		<Exit path="BadRequest"     state="error"   code="400" />
+		<Exit path="NotAuthorized"  state="error"   code="401" empty="true" />
+		<Exit path="NotAllowed"     state="error"   code="403" empty="true" />
+		<Exit path="ServerError"    state="error"   code="500" />
+
+		<JsonPipe name="Json2Xml" addXmlRootElement="true" storeResultInSessionKey="input"/>
+
+		<SenderPipe name="GetClientId" active="{OAuthCodeFlowNew.RequireClient}"
+		            storeResultInSessionKey="client_id">
+			<FixedQuerySender name="GetClientId"
+			                  queryType="SELECT"
+			                  query="SELECT CLIENT_ID FROM CLIENT WHERE CLIENT_NAME = ?"
+			                  scalar="true">
+				<Param name="CLIENT_NAME" xpathExpression="root/client_name"/>
+			</FixedQuerySender>
+			<Forward name="success" path="CheckClientId"/>
+			<Forward name="failure" path="Error_ClientNotFound"/>
+		</SenderPipe>
+
+		<XmlIfPipe name="CheckClientId" active="${OAuthCodeFlowNew.RequireClient}">
+			<Forward name="then" path="GetSystemId" active="${OAuthCodeFlowNew.RequireSystem}||${OAuthCodeFlowNew.RequireOAuthCredentials}"/>
+			<Forward name="then" path="generateUUID" active="!(${OAuthCodeFlowNew.RequireSystem}||${OAuthCodeFlowNew.RequireOAuthCredentials})"/>
+			<Forward name="else" path="Error_ClientNotFound"/>
+		</XmlIfPipe>
+
+		<SenderPipe name="GetSystemId" active="{OAuthCodeFlowNew.RequireSystem}"
+		            getInputFromSessionKey="input"
+		            storeResultInSessionKey="system_id">
+			<FixedQuerySender name="GetSystemId"
+			                  queryType="SELECT"
+			                  query="SELECT SYSTEM_ID FROM SYSTEM WHERE SYSTEM_NAME = ?"
+			                  scalar="true">
+				<Param name="SYSTEM_NAME" xpathExpression="root/system_name"/>
+			</FixedQuerySender>
+			<Forward name="success" path="CheckSystemId"/>
+			<Forward name="failure" path="Error_SystemNotFound"/>
+		</SenderPipe>
+
+		<XmlIfPipe name="CheckSystemId" active="${OAuthCodeFlowNew.RequireSystem}||${OAuthCodeFlowNew.RequireOAuthCredentials}">
+			<Forward name="then" path="generateUUID"/>
+			<Forward name="else" path="Error_SystemNotFound"/>
+		</XmlIfPipe>
+
+		<UUIDGeneratorPipe name="generateUUID" storeResultInSessionKey="uuid"/>
+
+		<SenderPipe name="InsertNewInfo">
+			<FixedQuerySender name="InsertNewInfo"
+			                  queryType="OTHER"
+			                  query="INSERT INTO OAUTH_INFO (INF_ID, CLI_ID, SYS_ID) VALUES (?, ?, ?)">
+				<Param name="INF_ID"/>
+				<Param name="CLIENT_ID" sessionKey="client_id" defaultValue="-1"/>
+				<Param name="SYSTEM_ID" sessionKey="system_id" defaultValue=""/>
+			</FixedQuerySender>
+			<Forward name="success" path="OAuthCodeFlowStart" active="${OAuthCodeFlowNew.RequireOAuthCredentials}"/>
+			<Forward name="success" path="BuildClientUrl" active="!${OAuthCodeFlowNew.RequireOAuthCredentials}"/>
+			<Forward name="failure" path="ServerError"/>
+		</SenderPipe>
+
+		<XsltPipe name="BuildClientUrl" active="!${OAuthCodeFlowNew.RequireOAuthCredentials}"
+		          getInputFromFixedValue="&lt;empty>empty&lt;/empty>"
+		          xpathExpression="concat('${OAuthURL}${OAuthFrontendPath}/form.html?p=', $uuid)">
+			<Param name="uuid" sessionKey="uuid"/>
+			<Forward name="success" path="OK"/>
+		</XsltPipe>
+
+		<XsltPipe name="CreateCodeFlowMessage" styleSheetName="OAuthCodeFlowNew/xsl/createCodeFlowMessage.xsl">
+			<Param name="system_id" sessionKey="system_id"/>
+		</XsltPipe>
+
+		<SenderPipe name="OAuthCodeFlowStart" active="${OAuthCodeFlowNew.RequireOAuthCredentials}">
+			<IbisLocalSender javaListener="OAuthCodeFlowStart">
+				<Param name="uuid" sessionKey="uuid"/>
+			</IbisLocalSender>
+			<Forward name="success" path="OK"/>
+		</SenderPipe>
+
+		<FixedResultPipe name="Error_ClientNotFound"
+		                 returnString="Error, client not found">
+			<Forward name="success" path="BadRequest"/>
+		</FixedResultPipe>
+
+		<FixedResultPipe name="Error_SystemNotFound" active="${OAuthCodeFlowNew.RequireSystem}||${OAuthCodeFlowNew.RequireOAuthCredentials}"
+		                 returnString="Error, system not found">
+			<Forward name="success" path="BadRequest"/>
+		</FixedResultPipe>
+	</Pipeline>
+</Adapter>

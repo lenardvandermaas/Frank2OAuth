@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>OAuth preparation form</title>
+        <link rel="stylesheet" href="form.css">
+    </head>
+
+    <body>
+        <form id="form" accept-charset="utf-8">
+            <label for="clients">Client Name:</label><br>
+            <select id="clients" name="client_name"/><br>
+            <input id="submit" type="submit" value="Submit">
+        </form>
+        <div id="result"></div>
+        <script>
+            const getUrl = window.location;
+            const baseUrl = getUrl.protocol + '//' + getUrl.host;
+            const clientsUrl = baseUrl + "/api/GetClients";
+            fetch(clientsUrl, {
+              method: "GET"
+            }).then(response => response.text().then(function (text) {
+              var select = document.getElementById('clients');
+              var options = JSON.parse(text).client;
+              console.log(options);
+              for (const opt of options) {
+                console.log(opt);
+                var option = document.createElement("option");
+                option.value = opt.name;
+                option.text = opt.displayname;
+                select.appendChild(option);
+              }
+            }));
+            document.getElementById('form').addEventListener('submit', (e) => {
+              e.preventDefault();
+              const button = document.getElementById('submit');
+              const resultDiv = document.getElementById('result');
+              const formData = new FormData(e.target).entries();
+              const data = Object.fromEntries(formData);
+              const prepUrl = baseUrl + "/api/OAuth/Prep";
+              button.setAttribute('disabled', 'true');
+              resultDiv.innerHTML = '<div class="dot-spin"/>'
+              fetch(prepUrl, {
+                  method: "POST",
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify(data)
+                }).then(response => response.text().then(function (text) {
+                  resultDiv.innerHTML = text;
+                  button.removeAttribute('disabled');
+                }));
+            });
+        </script>
+    </body>
+</html>
